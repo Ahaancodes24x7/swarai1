@@ -2,7 +2,6 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { useLanguage } from '@/contexts/LanguageContext';
-import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -13,15 +12,16 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useToast } from '@/hooks/use-toast';
 import { 
   Users, Play, FileText, LogOut, Plus, TrendingUp, 
-  AlertTriangle, CheckCircle, Loader2, BarChart3
+  AlertTriangle, CheckCircle, Loader2, BarChart3, Download
 } from 'lucide-react';
 import swarLogo from '@/assets/swar-logo.png';
+import { downloadPDF } from '@/lib/pdfExport';
 
 interface Student {
   id: string;
   name: string;
   age: number | null;
-  grade: string | null;
+  grade: number;
 }
 
 interface Session {
@@ -34,20 +34,19 @@ interface Session {
   created_at: string;
 }
 
-// Sample data for demo
 const sampleStudents: Student[] = [
-  { id: '1', name: 'Aarav Sharma', age: 8, grade: '3rd' },
-  { id: '2', name: 'Priya Patel', age: 9, grade: '4th' },
-  { id: '3', name: 'Rohan Kumar', age: 7, grade: '2nd' },
-  { id: '4', name: 'Ananya Singh', age: 10, grade: '5th' },
-  { id: '5', name: 'Vikram Reddy', age: 8, grade: '3rd' },
+  { id: '1', name: 'Aarav Sharma', age: 8, grade: 3 },
+  { id: '2', name: 'Priya Patel', age: 9, grade: 4 },
+  { id: '3', name: 'Rohan Kumar', age: 7, grade: 2 },
+  { id: '4', name: 'Ananya Singh', age: 10, grade: 5 },
+  { id: '5', name: 'Vikram Reddy', age: 8, grade: 3 },
 ];
 
-const sampleSessions: (Session & { studentName: string })[] = [
-  { id: '1', student_id: '1', studentName: 'Aarav Sharma', session_type: 'dyslexia', status: 'completed', overall_score: 72, flagged: true, created_at: '2026-01-10' },
-  { id: '2', student_id: '2', studentName: 'Priya Patel', session_type: 'dyscalculia', status: 'completed', overall_score: 85, flagged: false, created_at: '2026-01-09' },
-  { id: '3', student_id: '3', studentName: 'Rohan Kumar', session_type: 'dyslexia', status: 'in_progress', overall_score: null, flagged: null, created_at: '2026-01-11' },
-  { id: '4', student_id: '4', studentName: 'Ananya Singh', session_type: 'dyslexia', status: 'completed', overall_score: 92, flagged: false, created_at: '2026-01-08' },
+const sampleSessions: (Session & { studentName: string; studentGrade: number })[] = [
+  { id: '1', student_id: '1', studentName: 'Aarav Sharma', studentGrade: 3, session_type: 'dyslexia', status: 'completed', overall_score: 72, flagged: true, created_at: '2026-01-10' },
+  { id: '2', student_id: '2', studentName: 'Priya Patel', studentGrade: 4, session_type: 'dyscalculia', status: 'completed', overall_score: 85, flagged: false, created_at: '2026-01-09' },
+  { id: '3', student_id: '3', studentName: 'Rohan Kumar', studentGrade: 2, session_type: 'dyslexia', status: 'in_progress', overall_score: null, flagged: null, created_at: '2026-01-11' },
+  { id: '4', student_id: '4', studentName: 'Ananya Singh', studentGrade: 5, session_type: 'dyslexia', status: 'completed', overall_score: 92, flagged: false, created_at: '2026-01-08' },
 ];
 
 const TeacherDashboard = () => {
@@ -56,12 +55,11 @@ const TeacherDashboard = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
 
-  const [students] = useState<Student[]>(sampleStudents);
+  const [students, setStudents] = useState<Student[]>(sampleStudents);
   const [sessions] = useState(sampleSessions);
-  const [isAddingStudent, setIsAddingStudent] = useState(false);
-  const [newStudent, setNewStudent] = useState({ name: '', age: '', grade: '' });
   const [sessionDialogOpen, setSessionDialogOpen] = useState(false);
   const [selectedStudent, setSelectedStudent] = useState<string>('');
+  const [selectedGrade, setSelectedGrade] = useState<string>('');
   const [sessionType, setSessionType] = useState<'dyslexia' | 'dyscalculia'>('dyslexia');
 
   useEffect(() => {
@@ -80,8 +78,24 @@ const TeacherDashboard = () => {
       toast({ title: 'Please select a student', variant: 'destructive' });
       return;
     }
+    const student = students.find(s => s.id === selectedStudent);
+    const grade = selectedGrade || student?.grade || 1;
     setSessionDialogOpen(false);
-    navigate(`/session?student=${selectedStudent}&type=${sessionType}`);
+    navigate(`/session?student=${selectedStudent}&type=${sessionType}&grade=${grade}`);
+  };
+
+  const handleExportPDF = (session: typeof sampleSessions[0]) => {
+    downloadPDF({
+      studentName: session.studentName,
+      studentGrade: session.studentGrade,
+      sessionType: session.session_type as 'dyslexia' | 'dyscalculia',
+      date: new Date(session.created_at).toLocaleDateString(),
+      responses: [],
+      score: session.overall_score || 0,
+      isFlagged: session.flagged || false,
+      teacherName: profile?.full_name || undefined,
+    });
+    toast({ title: 'PDF Report Generated', description: 'Opening in new window...' });
   };
 
   const stats = {
@@ -101,7 +115,6 @@ const TeacherDashboard = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-background to-muted/30">
-      {/* Header */}
       <header className="bg-card border-b border-border sticky top-0 z-50">
         <div className="container mx-auto px-4 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -119,148 +132,64 @@ const TeacherDashboard = () => {
       </header>
 
       <main className="container mx-auto px-4 py-8">
-        {/* Stats Cards */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-          <Card>
-            <CardContent className="p-4 flex items-center gap-4">
-              <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center">
-                <Users className="h-6 w-6 text-primary" />
-              </div>
-              <div>
-                <p className="text-2xl font-bold">{stats.totalStudents}</p>
-                <p className="text-sm text-muted-foreground">{t('dashboard.students')}</p>
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="p-4 flex items-center gap-4">
-              <div className="w-12 h-12 rounded-full bg-chart-2/20 flex items-center justify-center">
-                <FileText className="h-6 w-6 text-chart-2" />
-              </div>
-              <div>
-                <p className="text-2xl font-bold">{stats.totalSessions}</p>
-                <p className="text-sm text-muted-foreground">{t('dashboard.sessions')}</p>
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="p-4 flex items-center gap-4">
-              <div className="w-12 h-12 rounded-full bg-destructive/10 flex items-center justify-center">
-                <AlertTriangle className="h-6 w-6 text-destructive" />
-              </div>
-              <div>
-                <p className="text-2xl font-bold">{stats.flaggedStudents}</p>
-                <p className="text-sm text-muted-foreground">Flagged</p>
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="p-4 flex items-center gap-4">
-              <div className="w-12 h-12 rounded-full bg-chart-3/20 flex items-center justify-center">
-                <TrendingUp className="h-6 w-6 text-chart-3" />
-              </div>
-              <div>
-                <p className="text-2xl font-bold">{stats.avgScore}%</p>
-                <p className="text-sm text-muted-foreground">Avg Score</p>
-              </div>
-            </CardContent>
-          </Card>
+          <Card><CardContent className="p-4 flex items-center gap-4"><div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center"><Users className="h-6 w-6 text-primary" /></div><div><p className="text-2xl font-bold">{stats.totalStudents}</p><p className="text-sm text-muted-foreground">{t('dashboard.students')}</p></div></CardContent></Card>
+          <Card><CardContent className="p-4 flex items-center gap-4"><div className="w-12 h-12 rounded-full bg-chart-2/20 flex items-center justify-center"><FileText className="h-6 w-6 text-chart-2" /></div><div><p className="text-2xl font-bold">{stats.totalSessions}</p><p className="text-sm text-muted-foreground">{t('dashboard.sessions')}</p></div></CardContent></Card>
+          <Card><CardContent className="p-4 flex items-center gap-4"><div className="w-12 h-12 rounded-full bg-destructive/10 flex items-center justify-center"><AlertTriangle className="h-6 w-6 text-destructive" /></div><div><p className="text-2xl font-bold">{stats.flaggedStudents}</p><p className="text-sm text-muted-foreground">Flagged</p></div></CardContent></Card>
+          <Card><CardContent className="p-4 flex items-center gap-4"><div className="w-12 h-12 rounded-full bg-chart-3/20 flex items-center justify-center"><TrendingUp className="h-6 w-6 text-chart-3" /></div><div><p className="text-2xl font-bold">{stats.avgScore}%</p><p className="text-sm text-muted-foreground">Avg Score</p></div></CardContent></Card>
         </div>
 
         <div className="grid lg:grid-cols-3 gap-8">
-          {/* Students List */}
           <Card className="lg:col-span-1">
             <CardHeader className="flex flex-row items-center justify-between">
-              <div>
-                <CardTitle>{t('dashboard.students')}</CardTitle>
-                <CardDescription>Manage your students</CardDescription>
-              </div>
-              <Button size="sm" onClick={() => setIsAddingStudent(true)}>
-                <Plus className="h-4 w-4" />
-              </Button>
+              <div><CardTitle>{t('dashboard.students')}</CardTitle><CardDescription>Manage your students</CardDescription></div>
+              <Button size="sm"><Plus className="h-4 w-4" /></Button>
             </CardHeader>
             <CardContent className="space-y-3">
               {students.map((student) => (
-                <div 
-                  key={student.id}
-                  className="flex items-center justify-between p-3 rounded-lg bg-muted/50 hover:bg-muted transition-colors"
-                >
+                <div key={student.id} className="flex items-center justify-between p-3 rounded-lg bg-muted/50 hover:bg-muted transition-colors">
                   <div>
                     <p className="font-medium">{student.name}</p>
-                    <p className="text-sm text-muted-foreground">
-                      {student.grade} Grade • Age {student.age}
-                    </p>
+                    <p className="text-sm text-muted-foreground">Grade {student.grade} • Age {student.age}</p>
                   </div>
-                  <Dialog>
-                    <DialogTrigger asChild>
-                      <Button 
-                        size="sm" 
-                        onClick={() => {
-                          setSelectedStudent(student.id);
-                          setSessionDialogOpen(true);
-                        }}
-                      >
-                        <Play className="h-4 w-4" />
-                      </Button>
-                    </DialogTrigger>
-                  </Dialog>
+                  <Button size="sm" onClick={() => { setSelectedStudent(student.id); setSelectedGrade(String(student.grade)); setSessionDialogOpen(true); }}>
+                    <Play className="h-4 w-4" />
+                  </Button>
                 </div>
               ))}
             </CardContent>
           </Card>
 
-          {/* Recent Sessions */}
           <Card className="lg:col-span-2">
             <CardHeader className="flex flex-row items-center justify-between">
-              <div>
-                <CardTitle>{t('dashboard.sessions')}</CardTitle>
-                <CardDescription>Recent assessment sessions</CardDescription>
-              </div>
+              <div><CardTitle>{t('dashboard.sessions')}</CardTitle><CardDescription>Recent assessment sessions</CardDescription></div>
               <Dialog open={sessionDialogOpen} onOpenChange={setSessionDialogOpen}>
-                <DialogTrigger asChild>
-                  <Button>
-                    <Play className="h-4 w-4 mr-2" />
-                    {t('dashboard.startSession')}
-                  </Button>
-                </DialogTrigger>
+                <DialogTrigger asChild><Button><Play className="h-4 w-4 mr-2" />{t('dashboard.startSession')}</Button></DialogTrigger>
                 <DialogContent>
-                  <DialogHeader>
-                    <DialogTitle>Start New Session</DialogTitle>
-                    <DialogDescription>
-                      Select a student and assessment type to begin
-                    </DialogDescription>
-                  </DialogHeader>
+                  <DialogHeader><DialogTitle>Start New Session</DialogTitle><DialogDescription>Select student, grade level, and assessment type</DialogDescription></DialogHeader>
                   <div className="space-y-4 py-4">
                     <div className="space-y-2">
                       <Label>Select Student</Label>
-                      <Select value={selectedStudent} onValueChange={setSelectedStudent}>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Choose a student" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {students.map((student) => (
-                            <SelectItem key={student.id} value={student.id}>
-                              {student.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
+                      <Select value={selectedStudent} onValueChange={(v) => { setSelectedStudent(v); const s = students.find(st => st.id === v); if (s) setSelectedGrade(String(s.grade)); }}>
+                        <SelectTrigger><SelectValue placeholder="Choose a student" /></SelectTrigger>
+                        <SelectContent>{students.map((student) => (<SelectItem key={student.id} value={student.id}>{student.name}</SelectItem>))}</SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Grade Level (1-12)</Label>
+                      <Select value={selectedGrade} onValueChange={setSelectedGrade}>
+                        <SelectTrigger><SelectValue placeholder="Select grade" /></SelectTrigger>
+                        <SelectContent>{Array.from({ length: 12 }, (_, i) => (<SelectItem key={i + 1} value={String(i + 1)}>Grade {i + 1}</SelectItem>))}</SelectContent>
                       </Select>
                     </div>
                     <div className="space-y-2">
                       <Label>Assessment Type</Label>
                       <Select value={sessionType} onValueChange={(v) => setSessionType(v as 'dyslexia' | 'dyscalculia')}>
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="dyslexia">Dyslexia Assessment</SelectItem>
-                          <SelectItem value="dyscalculia">Dyscalculia Assessment</SelectItem>
-                        </SelectContent>
+                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectContent><SelectItem value="dyslexia">Dyslexia Assessment</SelectItem><SelectItem value="dyscalculia">Dyscalculia Assessment</SelectItem></SelectContent>
                       </Select>
                     </div>
-                    <Button onClick={handleStartSession} className="w-full">
-                      Start Session
-                    </Button>
+                    <Button onClick={handleStartSession} className="w-full">Start Session</Button>
                   </div>
                 </DialogContent>
               </Dialog>
@@ -268,40 +197,19 @@ const TeacherDashboard = () => {
             <CardContent>
               <div className="space-y-4">
                 {sessions.map((session) => (
-                  <div 
-                    key={session.id}
-                    className="flex items-center justify-between p-4 rounded-lg border border-border hover:border-primary/50 transition-colors"
-                  >
+                  <div key={session.id} className="flex items-center justify-between p-4 rounded-lg border border-border hover:border-primary/50 transition-colors">
                     <div className="flex items-center gap-4">
-                      <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
-                        session.flagged ? 'bg-destructive/10' : 'bg-chart-3/20'
-                      }`}>
-                        {session.flagged ? (
-                          <AlertTriangle className="h-5 w-5 text-destructive" />
-                        ) : (
-                          <CheckCircle className="h-5 w-5 text-chart-3" />
-                        )}
+                      <div className={`w-10 h-10 rounded-full flex items-center justify-center ${session.flagged ? 'bg-destructive/10' : 'bg-chart-3/20'}`}>
+                        {session.flagged ? <AlertTriangle className="h-5 w-5 text-destructive" /> : <CheckCircle className="h-5 w-5 text-chart-3" />}
                       </div>
-                      <div>
-                        <p className="font-medium">{session.studentName}</p>
-                        <p className="text-sm text-muted-foreground capitalize">
-                          {session.session_type} Assessment
-                        </p>
-                      </div>
+                      <div><p className="font-medium">{session.studentName}</p><p className="text-sm text-muted-foreground capitalize">{session.session_type} • Grade {session.studentGrade}</p></div>
                     </div>
                     <div className="flex items-center gap-4">
-                      <Badge variant={
-                        session.status === 'completed' ? 'default' : 
-                        session.status === 'in_progress' ? 'secondary' : 'outline'
-                      }>
-                        {session.status}
-                      </Badge>
-                      {session.overall_score && (
-                        <span className="text-lg font-semibold">{session.overall_score}%</span>
+                      <Badge variant={session.status === 'completed' ? 'default' : 'secondary'}>{session.status}</Badge>
+                      {session.overall_score && <span className="text-lg font-semibold">{session.overall_score}%</span>}
+                      {session.status === 'completed' && (
+                        <Button variant="ghost" size="sm" onClick={() => handleExportPDF(session)}><Download className="h-4 w-4" /></Button>
                       )}
-                      <Button variant="ghost" size="sm">
-                        <BarChart3 className="h-4 w-4" />
-                      </Button>
                     </div>
                   </div>
                 ))}
