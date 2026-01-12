@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { useLanguage } from '@/contexts/LanguageContext';
+import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -12,7 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useToast } from '@/hooks/use-toast';
 import { 
   Users, Play, FileText, LogOut, Plus, TrendingUp, 
-  AlertTriangle, CheckCircle, Loader2, BarChart3, Download
+  AlertTriangle, CheckCircle, Loader2, Download
 } from 'lucide-react';
 import swarLogo from '@/assets/swar-logo.png';
 import { downloadPDF } from '@/lib/pdfExport';
@@ -58,9 +59,16 @@ const TeacherDashboard = () => {
   const [students, setStudents] = useState<Student[]>(sampleStudents);
   const [sessions] = useState(sampleSessions);
   const [sessionDialogOpen, setSessionDialogOpen] = useState(false);
+  const [addStudentDialogOpen, setAddStudentDialogOpen] = useState(false);
   const [selectedStudent, setSelectedStudent] = useState<string>('');
   const [selectedGrade, setSelectedGrade] = useState<string>('');
   const [sessionType, setSessionType] = useState<'dyslexia' | 'dyscalculia'>('dyslexia');
+  
+  // New student form state
+  const [newStudentName, setNewStudentName] = useState('');
+  const [newStudentAge, setNewStudentAge] = useState('');
+  const [newStudentGrade, setNewStudentGrade] = useState('');
+  const [isAddingStudent, setIsAddingStudent] = useState(false);
 
   useEffect(() => {
     if (!loading && (!user || profile?.role !== 'teacher')) {
@@ -68,9 +76,105 @@ const TeacherDashboard = () => {
     }
   }, [user, profile, loading, navigate]);
 
+  useEffect(() => {
+    if (profile?.id) {
+      fetchStudents();
+    }
+  }, [profile?.id]);
+
+  const fetchStudents = async () => {
+    if (!profile?.id) return;
+    
+    const { data, error } = await supabase
+      .from('students')
+      .select('*')
+      .eq('teacher_id', profile.id);
+    
+    if (error) {
+      console.error('Error fetching students:', error);
+      return;
+    }
+    
+    if (data && data.length > 0) {
+      const formattedStudents: Student[] = data.map(s => ({
+        id: s.id,
+        name: s.name,
+        age: s.age,
+        grade: parseInt(s.grade || '1') || 1,
+      }));
+      setStudents(formattedStudents);
+    }
+  };
+
   const handleLogout = async () => {
     await signOut();
     navigate('/');
+  };
+
+  const handleAddStudent = async () => {
+    // Validation
+    const name = newStudentName.trim();
+    if (!name) {
+      toast({ title: 'Name is required', variant: 'destructive' });
+      return;
+    }
+    if (name.length > 100) {
+      toast({ title: 'Name must be less than 100 characters', variant: 'destructive' });
+      return;
+    }
+    
+    const age = parseInt(newStudentAge);
+    if (newStudentAge && (isNaN(age) || age < 3 || age > 25)) {
+      toast({ title: 'Age must be between 3 and 25', variant: 'destructive' });
+      return;
+    }
+    
+    const grade = parseInt(newStudentGrade);
+    if (!newStudentGrade || isNaN(grade) || grade < 1 || grade > 12) {
+      toast({ title: 'Grade must be between 1 and 12', variant: 'destructive' });
+      return;
+    }
+
+    if (!profile?.id) {
+      toast({ title: 'Not authenticated', variant: 'destructive' });
+      return;
+    }
+
+    setIsAddingStudent(true);
+    
+    try {
+      const { data, error } = await supabase
+        .from('students')
+        .insert({
+          name: name,
+          age: newStudentAge ? age : null,
+          grade: String(grade),
+          teacher_id: profile.id,
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      const newStudent: Student = {
+        id: data.id,
+        name: data.name,
+        age: data.age,
+        grade: parseInt(data.grade || '1') || 1,
+      };
+
+      setStudents([...students, newStudent]);
+      setAddStudentDialogOpen(false);
+      setNewStudentName('');
+      setNewStudentAge('');
+      setNewStudentGrade('');
+      toast({ title: 'Student added successfully!' });
+    } catch (error: any) {
+      console.error('Error adding student:', error);
+      toast({ title: 'Failed to add student', description: error.message, variant: 'destructive' });
+    } finally {
+      setIsAddingStudent(false);
+    }
   };
 
   const handleStartSession = () => {
@@ -143,20 +247,90 @@ const TeacherDashboard = () => {
           <Card className="lg:col-span-1">
             <CardHeader className="flex flex-row items-center justify-between">
               <div><CardTitle>{t('dashboard.students')}</CardTitle><CardDescription>Manage your students</CardDescription></div>
-              <Button size="sm"><Plus className="h-4 w-4" /></Button>
+              <Dialog open={addStudentDialogOpen} onOpenChange={setAddStudentDialogOpen}>
+                <DialogTrigger asChild>
+                  <Button size="sm"><Plus className="h-4 w-4" /></Button>
+                </DialogTrigger>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>Add New Student</DialogTitle>
+                    <DialogDescription>Enter the student's details below</DialogDescription>
+                  </DialogHeader>
+                  <div className="space-y-4 py-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="studentName">Student Name *</Label>
+                      <Input
+                        id="studentName"
+                        placeholder="Enter student's full name"
+                        value={newStudentName}
+                        onChange={(e) => setNewStudentName(e.target.value)}
+                        maxLength={100}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="studentAge">Age (optional)</Label>
+                      <Input
+                        id="studentAge"
+                        type="number"
+                        placeholder="Enter age (3-25)"
+                        value={newStudentAge}
+                        onChange={(e) => setNewStudentAge(e.target.value)}
+                        min={3}
+                        max={25}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Grade Level *</Label>
+                      <Select value={newStudentGrade} onValueChange={setNewStudentGrade}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select grade (1-12)" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {Array.from({ length: 12 }, (_, i) => (
+                            <SelectItem key={i + 1} value={String(i + 1)}>
+                              Grade {i + 1}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <Button 
+                      onClick={handleAddStudent} 
+                      className="w-full"
+                      disabled={isAddingStudent}
+                    >
+                      {isAddingStudent ? (
+                        <>
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          Adding...
+                        </>
+                      ) : (
+                        <>
+                          <Plus className="h-4 w-4 mr-2" />
+                          Add Student
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                </DialogContent>
+              </Dialog>
             </CardHeader>
             <CardContent className="space-y-3">
-              {students.map((student) => (
-                <div key={student.id} className="flex items-center justify-between p-3 rounded-lg bg-muted/50 hover:bg-muted transition-colors">
-                  <div>
-                    <p className="font-medium">{student.name}</p>
-                    <p className="text-sm text-muted-foreground">Grade {student.grade} • Age {student.age}</p>
+              {students.length === 0 ? (
+                <p className="text-muted-foreground text-center py-8">No students yet. Add your first student!</p>
+              ) : (
+                students.map((student) => (
+                  <div key={student.id} className="flex items-center justify-between p-3 rounded-lg bg-muted/50 hover:bg-muted transition-colors">
+                    <div>
+                      <p className="font-medium">{student.name}</p>
+                      <p className="text-sm text-muted-foreground">Grade {student.grade} {student.age ? `• Age ${student.age}` : ''}</p>
+                    </div>
+                    <Button size="sm" onClick={() => { setSelectedStudent(student.id); setSelectedGrade(String(student.grade)); setSessionDialogOpen(true); }}>
+                      <Play className="h-4 w-4" />
+                    </Button>
                   </div>
-                  <Button size="sm" onClick={() => { setSelectedStudent(student.id); setSelectedGrade(String(student.grade)); setSessionDialogOpen(true); }}>
-                    <Play className="h-4 w-4" />
-                  </Button>
-                </div>
-              ))}
+                ))
+              )}
             </CardContent>
           </Card>
 
