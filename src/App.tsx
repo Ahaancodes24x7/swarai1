@@ -11,6 +11,7 @@ import TeacherDashboard from "./pages/TeacherDashboard";
 import ParentDashboard from "./pages/ParentDashboard";
 import Session from "./pages/Session";
 import LearnMore from "./pages/LearnMore";
+import WhyItMatters from "./pages/WhyItMatters";
 import Ethics from "./pages/Ethics";
 import Privacy from "./pages/Privacy";
 import Help from "./pages/Help";
@@ -33,6 +34,7 @@ const App = () => (
               <Route path="/parent-dashboard" element={<ParentDashboard />} />
               <Route path="/session" element={<Session />} />
               <Route path="/learn-more" element={<LearnMore />} />
+              <Route path="/why-it-matters" element={<WhyItMatters />} />
               <Route path="/ethics" element={<Ethics />} />
               <Route path="/privacy" element={<Privacy />} />
               <Route path="/help" element={<Help />} />
