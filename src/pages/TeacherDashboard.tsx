@@ -19,6 +19,8 @@ import {
 import swarLogo from '@/assets/swar-logo.png';
 import { downloadPDF } from '@/lib/pdfExport';
 import TeacherTraining from '@/components/TeacherTraining';
+import PracticeWorksheet from '@/components/PracticeWorksheet';
+import ProgressChart from '@/components/ProgressChart';
 
 interface Student {
   id: string;
@@ -35,24 +37,10 @@ interface Session {
   overall_score: number | null;
   flagged: boolean | null;
   created_at: string;
+  studentName?: string;
+  studentGrade?: number;
 }
 
-const sampleStudents: Student[] = [
-  { id: '1', name: 'Aarav Sharma', age: 8, grade: 3 },
-  { id: '2', name: 'Priya Patel', age: 9, grade: 4 },
-  { id: '3', name: 'Rohan Kumar', age: 7, grade: 2 },
-  { id: '4', name: 'Ananya Singh', age: 10, grade: 5 },
-  { id: '5', name: 'Vikram Reddy', age: 8, grade: 3 },
-];
-
-const sampleSessions: (Session & { studentName: string; studentGrade: number })[] = [
-  { id: '1', student_id: '1', studentName: 'Aarav Sharma', studentGrade: 3, session_type: 'dyslexia', status: 'completed', overall_score: 72, flagged: true, created_at: '2026-01-10' },
-  { id: '2', student_id: '2', studentName: 'Priya Patel', studentGrade: 4, session_type: 'dyscalculia', status: 'completed', overall_score: 85, flagged: false, created_at: '2026-01-09' },
-  { id: '3', student_id: '3', studentName: 'Rohan Kumar', studentGrade: 2, session_type: 'dyslexia', status: 'in_progress', overall_score: null, flagged: null, created_at: '2026-01-11' },
-  { id: '4', student_id: '4', studentName: 'Ananya Singh', studentGrade: 5, session_type: 'dyslexia', status: 'completed', overall_score: 92, flagged: false, created_at: '2026-01-08' },
-];
-
-// Helper function to get score interpretation
 const getScoreInterpretation = (score: number | null, sessionType: string, t: (key: string) => string): { text: string; variant: 'default' | 'secondary' | 'destructive' } => {
   if (score === null) return { text: '-', variant: 'secondary' };
   
@@ -76,15 +64,16 @@ const TeacherDashboard = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
 
-  const [students, setStudents] = useState<Student[]>(sampleStudents);
-  const [sessions] = useState(sampleSessions);
+  const [students, setStudents] = useState<Student[]>([]);
+  const [sessions, setSessions] = useState<Session[]>([]);
+  const [sessionsLoading, setSessionsLoading] = useState(true);
   const [sessionDialogOpen, setSessionDialogOpen] = useState(false);
   const [addStudentDialogOpen, setAddStudentDialogOpen] = useState(false);
   const [selectedStudent, setSelectedStudent] = useState<string>('');
   const [selectedGrade, setSelectedGrade] = useState<string>('');
   const [sessionType, setSessionType] = useState<'dyslexia' | 'dyscalculia'>('dyslexia');
+  const [selectedStudentForReport, setSelectedStudentForReport] = useState<string>('');
   
-  // New student form state
   const [newStudentName, setNewStudentName] = useState('');
   const [newStudentAge, setNewStudentAge] = useState('');
   const [newStudentGrade, setNewStudentGrade] = useState('');
@@ -99,6 +88,7 @@ const TeacherDashboard = () => {
   useEffect(() => {
     if (profile?.id) {
       fetchStudents();
+      fetchSessions();
     }
   }, [profile?.id]);
 
@@ -115,7 +105,7 @@ const TeacherDashboard = () => {
       return;
     }
     
-    if (data && data.length > 0) {
+    if (data) {
       const formattedStudents: Student[] = data.map(s => ({
         id: s.id,
         name: s.name,
@@ -124,6 +114,39 @@ const TeacherDashboard = () => {
       }));
       setStudents(formattedStudents);
     }
+  };
+
+  const fetchSessions = async () => {
+    if (!profile?.id) return;
+    setSessionsLoading(true);
+    
+    const { data, error } = await supabase
+      .from('assessment_sessions')
+      .select('*, students(name, grade)')
+      .eq('teacher_id', profile.id)
+      .order('created_at', { ascending: false });
+    
+    if (error) {
+      console.error('Error fetching sessions:', error);
+      setSessionsLoading(false);
+      return;
+    }
+    
+    if (data) {
+      const formattedSessions: Session[] = data.map(s => ({
+        id: s.id,
+        student_id: s.student_id,
+        session_type: s.session_type,
+        status: s.status,
+        overall_score: s.overall_score,
+        flagged: s.flagged,
+        created_at: s.created_at,
+        studentName: (s.students as any)?.name || 'Unknown',
+        studentGrade: parseInt((s.students as any)?.grade || '1') || 1,
+      }));
+      setSessions(formattedSessions);
+    }
+    setSessionsLoading(false);
   };
 
   const handleLogout = async () => {
@@ -135,10 +158,6 @@ const TeacherDashboard = () => {
     const name = newStudentName.trim();
     if (!name) {
       toast({ title: t('teacher.studentName') + ' required', variant: 'destructive' });
-      return;
-    }
-    if (name.length > 100) {
-      toast({ title: 'Name must be less than 100 characters', variant: 'destructive' });
       return;
     }
     
@@ -164,32 +183,19 @@ const TeacherDashboard = () => {
     try {
       const { data, error } = await supabase
         .from('students')
-        .insert({
-          name: name,
-          age: newStudentAge ? age : null,
-          grade: String(grade),
-          teacher_id: profile.id,
-        })
+        .insert({ name, age: newStudentAge ? age : null, grade: String(grade), teacher_id: profile.id })
         .select()
         .single();
 
       if (error) throw error;
 
-      const newStudent: Student = {
-        id: data.id,
-        name: data.name,
-        age: data.age,
-        grade: parseInt(data.grade || '1') || 1,
-      };
-
-      setStudents([...students, newStudent]);
+      setStudents([...students, { id: data.id, name: data.name, age: data.age, grade: parseInt(data.grade || '1') || 1 }]);
       setAddStudentDialogOpen(false);
       setNewStudentName('');
       setNewStudentAge('');
       setNewStudentGrade('');
       toast({ title: t('teacher.studentAdded') });
     } catch (error: any) {
-      console.error('Error adding student:', error);
       toast({ title: 'Failed to add student', description: error.message, variant: 'destructive' });
     } finally {
       setIsAddingStudent(false);
@@ -207,11 +213,11 @@ const TeacherDashboard = () => {
     navigate(`/session?student=${selectedStudent}&type=${sessionType}&grade=${grade}&lang=${language}`);
   };
 
-  const handleExportPDF = (session: typeof sampleSessions[0]) => {
+  const handleExportPDF = (session: Session) => {
     const interpretation = getScoreInterpretation(session.overall_score, session.session_type, t);
     downloadPDF({
-      studentName: session.studentName,
-      studentGrade: session.studentGrade,
+      studentName: session.studentName || 'Unknown',
+      studentGrade: session.studentGrade || 1,
       sessionType: session.session_type as 'dyslexia' | 'dyscalculia',
       date: new Date(session.created_at).toLocaleDateString(),
       responses: [],
@@ -223,12 +229,18 @@ const TeacherDashboard = () => {
     toast({ title: t('session.pdfGenerated') });
   };
 
+  const completedSessions = sessions.filter(s => s.status === 'completed');
   const stats = {
     totalStudents: students.length,
     totalSessions: sessions.length,
     flaggedStudents: sessions.filter(s => s.flagged).length,
-    avgScore: Math.round(sessions.filter(s => s.overall_score).reduce((acc, s) => acc + (s.overall_score || 0), 0) / sessions.filter(s => s.overall_score).length) || 0,
+    avgScore: completedSessions.length > 0 
+      ? Math.round(completedSessions.reduce((acc, s) => acc + (s.overall_score || 0), 0) / completedSessions.length) 
+      : 0,
   };
+
+  const selectedStudentData = students.find(s => s.id === selectedStudentForReport);
+  const selectedStudentSessions = sessions.filter(s => s.student_id === selectedStudentForReport && s.status === 'completed');
 
   if (loading) {
     return (
@@ -280,68 +292,27 @@ const TeacherDashboard = () => {
                 <CardHeader className="flex flex-row items-center justify-between">
                   <div><CardTitle>{t('dashboard.students')}</CardTitle><CardDescription>{t('teacher.manageStudents')}</CardDescription></div>
                   <Dialog open={addStudentDialogOpen} onOpenChange={setAddStudentDialogOpen}>
-                    <DialogTrigger asChild>
-                      <Button size="sm"><Plus className="h-4 w-4" /></Button>
-                    </DialogTrigger>
+                    <DialogTrigger asChild><Button size="sm"><Plus className="h-4 w-4" /></Button></DialogTrigger>
                     <DialogContent>
-                      <DialogHeader>
-                        <DialogTitle>{t('teacher.addStudent')}</DialogTitle>
-                        <DialogDescription>{t('teacher.enterDetails')}</DialogDescription>
-                      </DialogHeader>
+                      <DialogHeader><DialogTitle>{t('teacher.addStudent')}</DialogTitle><DialogDescription>{t('teacher.enterDetails')}</DialogDescription></DialogHeader>
                       <div className="space-y-4 py-4">
                         <div className="space-y-2">
                           <Label htmlFor="studentName">{t('teacher.studentName')} *</Label>
-                          <Input
-                            id="studentName"
-                            placeholder={t('teacher.studentName')}
-                            value={newStudentName}
-                            onChange={(e) => setNewStudentName(e.target.value)}
-                            maxLength={100}
-                          />
+                          <Input id="studentName" placeholder={t('teacher.studentName')} value={newStudentName} onChange={(e) => setNewStudentName(e.target.value)} maxLength={100} />
                         </div>
                         <div className="space-y-2">
                           <Label htmlFor="studentAge">{t('teacher.age')} ({t('teacher.optional')})</Label>
-                          <Input
-                            id="studentAge"
-                            type="number"
-                            placeholder="3-25"
-                            value={newStudentAge}
-                            onChange={(e) => setNewStudentAge(e.target.value)}
-                            min={3}
-                            max={25}
-                          />
+                          <Input id="studentAge" type="number" placeholder="3-25" value={newStudentAge} onChange={(e) => setNewStudentAge(e.target.value)} min={3} max={25} />
                         </div>
                         <div className="space-y-2">
                           <Label>{t('teacher.gradeLevel')} *</Label>
                           <Select value={newStudentGrade} onValueChange={setNewStudentGrade}>
-                            <SelectTrigger>
-                              <SelectValue placeholder={t('teacher.selectGrade')} />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {Array.from({ length: 12 }, (_, i) => (
-                                <SelectItem key={i + 1} value={String(i + 1)}>
-                                  {t('teacher.grade')} {i + 1}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
+                            <SelectTrigger><SelectValue placeholder={t('teacher.selectGrade')} /></SelectTrigger>
+                            <SelectContent>{Array.from({ length: 12 }, (_, i) => (<SelectItem key={i + 1} value={String(i + 1)}>{t('teacher.grade')} {i + 1}</SelectItem>))}</SelectContent>
                           </Select>
                         </div>
-                        <Button 
-                          onClick={handleAddStudent} 
-                          className="w-full"
-                          disabled={isAddingStudent}
-                        >
-                          {isAddingStudent ? (
-                            <>
-                              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                              {t('teacher.adding')}
-                            </>
-                          ) : (
-                            <>
-                              <Plus className="h-4 w-4 mr-2" />
-                              {t('teacher.addStudent')}
-                            </>
-                          )}
+                        <Button onClick={handleAddStudent} className="w-full" disabled={isAddingStudent}>
+                          {isAddingStudent ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />{t('teacher.adding')}</> : <><Plus className="h-4 w-4 mr-2" />{t('teacher.addStudent')}</>}
                         </Button>
                       </div>
                     </DialogContent>
@@ -382,7 +353,7 @@ const TeacherDashboard = () => {
                           </Select>
                         </div>
                         <div className="space-y-2">
-                          <Label>{t('teacher.gradeLevel')} (1-12)</Label>
+                          <Label>{t('teacher.gradeLevel')}</Label>
                           <Select value={selectedGrade} onValueChange={setSelectedGrade}>
                             <SelectTrigger><SelectValue placeholder={t('teacher.selectGrade')} /></SelectTrigger>
                             <SelectContent>{Array.from({ length: 12 }, (_, i) => (<SelectItem key={i + 1} value={String(i + 1)}>{t('teacher.grade')} {i + 1}</SelectItem>))}</SelectContent>
@@ -404,74 +375,111 @@ const TeacherDashboard = () => {
                   </Dialog>
                 </CardHeader>
                 <CardContent>
-                  <div className="space-y-4">
-                    {sessions.map((session) => {
-                      const interpretation = getScoreInterpretation(session.overall_score, session.session_type, t);
-                      return (
-                        <div key={session.id} className="flex items-center justify-between p-4 rounded-lg border border-border hover:border-primary/50 transition-colors">
-                          <div className="flex items-center gap-4">
-                            <div className={`w-10 h-10 rounded-full flex items-center justify-center ${session.flagged ? 'bg-destructive/10' : 'bg-chart-3/20'}`}>
-                              {session.flagged ? <AlertTriangle className="h-5 w-5 text-destructive" /> : <CheckCircle className="h-5 w-5 text-chart-3" />}
+                  {sessionsLoading ? (
+                    <div className="text-center py-8"><Loader2 className="h-8 w-8 animate-spin mx-auto text-primary" /></div>
+                  ) : sessions.length === 0 ? (
+                    <p className="text-muted-foreground text-center py-8">No sessions yet. Start an assessment!</p>
+                  ) : (
+                    <div className="space-y-4">
+                      {sessions.slice(0, 5).map((session) => {
+                        const interpretation = getScoreInterpretation(session.overall_score, session.session_type, t);
+                        return (
+                          <div key={session.id} className="flex items-center justify-between p-4 rounded-lg border border-border hover:border-primary/50 transition-colors">
+                            <div className="flex items-center gap-4">
+                              <div className={`w-10 h-10 rounded-full flex items-center justify-center ${session.flagged ? 'bg-destructive/10' : 'bg-chart-3/20'}`}>
+                                {session.flagged ? <AlertTriangle className="h-5 w-5 text-destructive" /> : <CheckCircle className="h-5 w-5 text-chart-3" />}
+                              </div>
+                              <div>
+                                <p className="font-medium">{session.studentName}</p>
+                                <p className="text-sm text-muted-foreground capitalize">{session.session_type} • {t('teacher.grade')} {session.studentGrade}</p>
+                                {session.overall_score !== null && (
+                                  <p className={`text-xs mt-1 ${interpretation.variant === 'destructive' ? 'text-destructive' : 'text-muted-foreground'}`}>{interpretation.text}</p>
+                                )}
+                              </div>
                             </div>
-                            <div>
-                              <p className="font-medium">{session.studentName}</p>
-                              <p className="text-sm text-muted-foreground capitalize">{session.session_type} • {t('teacher.grade')} {session.studentGrade}</p>
-                              {session.overall_score && (
-                                <p className={`text-xs mt-1 ${interpretation.variant === 'destructive' ? 'text-destructive' : 'text-muted-foreground'}`}>
-                                  {interpretation.text}
-                                </p>
+                            <div className="flex items-center gap-4">
+                              <Badge variant={session.status === 'completed' ? 'default' : 'secondary'}>{session.status}</Badge>
+                              {session.overall_score !== null && <span className="text-lg font-semibold">{session.overall_score}%</span>}
+                              {session.status === 'completed' && (
+                                <Button variant="ghost" size="sm" onClick={() => handleExportPDF(session)}><Download className="h-4 w-4" /></Button>
                               )}
                             </div>
                           </div>
-                          <div className="flex items-center gap-4">
-                            <Badge variant={session.status === 'completed' ? 'default' : 'secondary'}>{session.status}</Badge>
-                            {session.overall_score && <span className="text-lg font-semibold">{session.overall_score}%</span>}
-                            {session.status === 'completed' && (
-                              <Button variant="ghost" size="sm" onClick={() => handleExportPDF(session)}><Download className="h-4 w-4" /></Button>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             </div>
           </TabsContent>
 
           <TabsContent value="reports">
-            <Card>
-              <CardHeader>
-                <CardTitle>{t('dashboard.reports')}</CardTitle>
-                <CardDescription>View and export detailed assessment reports</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  {sessions.filter(s => s.status === 'completed').map((session) => {
-                    const interpretation = getScoreInterpretation(session.overall_score, session.session_type, t);
-                    return (
-                      <div key={session.id} className="flex items-center justify-between p-4 rounded-lg border border-border">
-                        <div className="flex-1">
-                          <div className="flex items-center gap-3">
-                            <p className="font-medium">{session.studentName}</p>
-                            <Badge variant={interpretation.variant}>{session.overall_score}%</Badge>
-                            {session.flagged && <Badge variant="destructive">{t('teacher.flagged')}</Badge>}
+            <div className="grid lg:grid-cols-3 gap-8">
+              <div className="lg:col-span-2 space-y-6">
+                <Card>
+                  <CardHeader>
+                    <CardTitle>{t('dashboard.reports')}</CardTitle>
+                    <CardDescription>View and export detailed assessment reports</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="mb-4">
+                      <Label>Select Student for Progress Report</Label>
+                      <Select value={selectedStudentForReport} onValueChange={setSelectedStudentForReport}>
+                        <SelectTrigger><SelectValue placeholder="Choose a student" /></SelectTrigger>
+                        <SelectContent>{students.map((student) => (<SelectItem key={student.id} value={student.id}>{student.name}</SelectItem>))}</SelectContent>
+                      </Select>
+                    </div>
+                    
+                    {selectedStudentForReport && selectedStudentData && (
+                      <ProgressChart 
+                        studentName={selectedStudentData.name}
+                        sessions={selectedStudentSessions.map(s => ({
+                          id: s.id,
+                          date: s.created_at,
+                          score: s.overall_score || 0,
+                          sessionType: s.session_type,
+                        }))}
+                      />
+                    )}
+                    
+                    <div className="space-y-4 mt-6">
+                      {completedSessions.map((session) => {
+                        const interpretation = getScoreInterpretation(session.overall_score, session.session_type, t);
+                        return (
+                          <div key={session.id} className="flex items-center justify-between p-4 rounded-lg border border-border">
+                            <div className="flex-1">
+                              <div className="flex items-center gap-3">
+                                <p className="font-medium">{session.studentName}</p>
+                                <Badge variant={interpretation.variant}>{session.overall_score}%</Badge>
+                                {session.flagged && <Badge variant="destructive">{t('teacher.flagged')}</Badge>}
+                              </div>
+                              <p className="text-sm text-muted-foreground capitalize mt-1">{session.session_type} • {t('teacher.grade')} {session.studentGrade} • {new Date(session.created_at).toLocaleDateString()}</p>
+                              <p className="text-sm mt-2">{interpretation.text}</p>
+                            </div>
+                            <Button variant="outline" onClick={() => handleExportPDF(session)}>
+                              <Download className="h-4 w-4 mr-2" />{t('session.exportPDF')}
+                            </Button>
                           </div>
-                          <p className="text-sm text-muted-foreground capitalize mt-1">
-                            {session.session_type} • {t('teacher.grade')} {session.studentGrade} • {new Date(session.created_at).toLocaleDateString()}
-                          </p>
-                          <p className="text-sm mt-2">{interpretation.text}</p>
-                        </div>
-                        <Button variant="outline" onClick={() => handleExportPDF(session)}>
-                          <Download className="h-4 w-4 mr-2" />
-                          {t('session.exportPDF')}
-                        </Button>
-                      </div>
-                    );
-                  })}
-                </div>
-              </CardContent>
-            </Card>
+                        );
+                      })}
+                      {completedSessions.length === 0 && <p className="text-center text-muted-foreground py-8">No completed sessions yet.</p>}
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+              
+              <div>
+                {selectedStudentForReport && selectedStudentData && selectedStudentSessions.length > 0 && (
+                  <PracticeWorksheet 
+                    studentName={selectedStudentData.name}
+                    sessionType={selectedStudentSessions[0].session_type as 'dyslexia' | 'dyscalculia'}
+                    score={selectedStudentSessions[0].overall_score || 50}
+                    grade={selectedStudentData.grade}
+                  />
+                )}
+              </div>
+            </div>
           </TabsContent>
 
           <TabsContent value="training">
