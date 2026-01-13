@@ -81,7 +81,7 @@ const Auth = () => {
 
     if (error) {
       toast({
-        title: 'Login Failed',
+        title: t('auth.loginFailed'),
         description: error.message === 'Invalid login credentials' 
           ? 'Invalid email or password. Please try again.'
           : error.message,
@@ -104,14 +104,14 @@ const Auth = () => {
         errorMessage = 'This email is already registered. Please login instead.';
       }
       toast({
-        title: 'Sign Up Failed',
+        title: t('auth.signupFailed'),
         description: errorMessage,
         variant: 'destructive',
       });
     } else {
       toast({
-        title: 'Account Created!',
-        description: 'Welcome to SWAR! Redirecting to your dashboard...',
+        title: t('auth.accountCreated'),
+        description: t('auth.welcomeRedirect'),
       });
     }
   };
@@ -132,7 +132,7 @@ const Auth = () => {
       <div className="w-full max-w-md">
         <Link to="/" className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors mb-6">
           <ArrowLeft className="h-4 w-4" />
-          Back to Home
+          {t('nav.backToHome')}
         </Link>
 
         <Card className="shadow-xl border-t-4 border-t-primary">
@@ -147,7 +147,7 @@ const Auth = () => {
               <CardTitle className="text-xl">{roleTitle}</CardTitle>
             </div>
             <CardDescription>
-              Access your personalized dashboard
+              {t('auth.accessDashboard')}
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -253,7 +253,7 @@ const Auth = () => {
                 to={`/auth?role=${role === 'teacher' ? 'parent' : 'teacher'}`}
                 className="text-sm text-muted-foreground hover:text-primary transition-colors"
               >
-                Switch to {role === 'teacher' ? 'Parent' : 'Teacher'} Portal →
+                {t('auth.switchTo')} {role === 'teacher' ? t('role.parent') : t('role.teacher')} {t('auth.portal')} →
               </Link>
             </div>
           </CardContent>

@@ -10,13 +10,15 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
 import { 
   Users, Play, FileText, LogOut, Plus, TrendingUp, 
-  AlertTriangle, CheckCircle, Loader2, Download
+  AlertTriangle, CheckCircle, Loader2, Download, BookOpen
 } from 'lucide-react';
 import swarLogo from '@/assets/swar-logo.png';
 import { downloadPDF } from '@/lib/pdfExport';
+import TeacherTraining from '@/components/TeacherTraining';
 
 interface Student {
   id: string;
@@ -50,9 +52,27 @@ const sampleSessions: (Session & { studentName: string; studentGrade: number })[
   { id: '4', student_id: '4', studentName: 'Ananya Singh', studentGrade: 5, session_type: 'dyslexia', status: 'completed', overall_score: 92, flagged: false, created_at: '2026-01-08' },
 ];
 
+// Helper function to get score interpretation
+const getScoreInterpretation = (score: number | null, sessionType: string, t: (key: string) => string): { text: string; variant: 'default' | 'secondary' | 'destructive' } => {
+  if (score === null) return { text: '-', variant: 'secondary' };
+  
+  if (score >= 85) {
+    return { text: t('score.excellent'), variant: 'default' };
+  } else if (score >= 70) {
+    return { text: t('score.good'), variant: 'default' };
+  } else if (score >= 55) {
+    return { text: t('score.moderate'), variant: 'secondary' };
+  } else {
+    return { 
+      text: sessionType === 'dyslexia' ? t('score.concernDyslexia') : t('score.concernDyscalculia'), 
+      variant: 'destructive' 
+    };
+  }
+};
+
 const TeacherDashboard = () => {
   const { user, profile, signOut, loading } = useAuth();
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
   const navigate = useNavigate();
   const { toast } = useToast();
 
@@ -112,10 +132,9 @@ const TeacherDashboard = () => {
   };
 
   const handleAddStudent = async () => {
-    // Validation
     const name = newStudentName.trim();
     if (!name) {
-      toast({ title: 'Name is required', variant: 'destructive' });
+      toast({ title: t('teacher.studentName') + ' required', variant: 'destructive' });
       return;
     }
     if (name.length > 100) {
@@ -125,13 +144,13 @@ const TeacherDashboard = () => {
     
     const age = parseInt(newStudentAge);
     if (newStudentAge && (isNaN(age) || age < 3 || age > 25)) {
-      toast({ title: 'Age must be between 3 and 25', variant: 'destructive' });
+      toast({ title: t('teacher.age') + ' must be 3-25', variant: 'destructive' });
       return;
     }
     
     const grade = parseInt(newStudentGrade);
     if (!newStudentGrade || isNaN(grade) || grade < 1 || grade > 12) {
-      toast({ title: 'Grade must be between 1 and 12', variant: 'destructive' });
+      toast({ title: t('teacher.gradeLevel') + ' must be 1-12', variant: 'destructive' });
       return;
     }
 
@@ -168,7 +187,7 @@ const TeacherDashboard = () => {
       setNewStudentName('');
       setNewStudentAge('');
       setNewStudentGrade('');
-      toast({ title: 'Student added successfully!' });
+      toast({ title: t('teacher.studentAdded') });
     } catch (error: any) {
       console.error('Error adding student:', error);
       toast({ title: 'Failed to add student', description: error.message, variant: 'destructive' });
@@ -179,16 +198,17 @@ const TeacherDashboard = () => {
 
   const handleStartSession = () => {
     if (!selectedStudent) {
-      toast({ title: 'Please select a student', variant: 'destructive' });
+      toast({ title: t('teacher.selectStudent'), variant: 'destructive' });
       return;
     }
     const student = students.find(s => s.id === selectedStudent);
     const grade = selectedGrade || student?.grade || 1;
     setSessionDialogOpen(false);
-    navigate(`/session?student=${selectedStudent}&type=${sessionType}&grade=${grade}`);
+    navigate(`/session?student=${selectedStudent}&type=${sessionType}&grade=${grade}&lang=${language}`);
   };
 
   const handleExportPDF = (session: typeof sampleSessions[0]) => {
+    const interpretation = getScoreInterpretation(session.overall_score, session.session_type, t);
     downloadPDF({
       studentName: session.studentName,
       studentGrade: session.studentGrade,
@@ -198,8 +218,9 @@ const TeacherDashboard = () => {
       score: session.overall_score || 0,
       isFlagged: session.flagged || false,
       teacherName: profile?.full_name || undefined,
+      interpretation: interpretation.text,
     });
-    toast({ title: 'PDF Report Generated', description: 'Opening in new window...' });
+    toast({ title: t('session.pdfGenerated') });
   };
 
   const stats = {
@@ -224,7 +245,7 @@ const TeacherDashboard = () => {
           <div className="flex items-center gap-3">
             <img src={swarLogo} alt="SWAR" className="h-10" />
             <div>
-              <h1 className="text-xl font-bold">Teacher Dashboard</h1>
+              <h1 className="text-xl font-bold">{t('teacher.dashboard')}</h1>
               <p className="text-sm text-muted-foreground">{t('dashboard.welcome')}, {profile?.full_name}</p>
             </div>
           </div>
@@ -239,158 +260,224 @@ const TeacherDashboard = () => {
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
           <Card><CardContent className="p-4 flex items-center gap-4"><div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center"><Users className="h-6 w-6 text-primary" /></div><div><p className="text-2xl font-bold">{stats.totalStudents}</p><p className="text-sm text-muted-foreground">{t('dashboard.students')}</p></div></CardContent></Card>
           <Card><CardContent className="p-4 flex items-center gap-4"><div className="w-12 h-12 rounded-full bg-chart-2/20 flex items-center justify-center"><FileText className="h-6 w-6 text-chart-2" /></div><div><p className="text-2xl font-bold">{stats.totalSessions}</p><p className="text-sm text-muted-foreground">{t('dashboard.sessions')}</p></div></CardContent></Card>
-          <Card><CardContent className="p-4 flex items-center gap-4"><div className="w-12 h-12 rounded-full bg-destructive/10 flex items-center justify-center"><AlertTriangle className="h-6 w-6 text-destructive" /></div><div><p className="text-2xl font-bold">{stats.flaggedStudents}</p><p className="text-sm text-muted-foreground">Flagged</p></div></CardContent></Card>
-          <Card><CardContent className="p-4 flex items-center gap-4"><div className="w-12 h-12 rounded-full bg-chart-3/20 flex items-center justify-center"><TrendingUp className="h-6 w-6 text-chart-3" /></div><div><p className="text-2xl font-bold">{stats.avgScore}%</p><p className="text-sm text-muted-foreground">Avg Score</p></div></CardContent></Card>
+          <Card><CardContent className="p-4 flex items-center gap-4"><div className="w-12 h-12 rounded-full bg-destructive/10 flex items-center justify-center"><AlertTriangle className="h-6 w-6 text-destructive" /></div><div><p className="text-2xl font-bold">{stats.flaggedStudents}</p><p className="text-sm text-muted-foreground">{t('teacher.flagged')}</p></div></CardContent></Card>
+          <Card><CardContent className="p-4 flex items-center gap-4"><div className="w-12 h-12 rounded-full bg-chart-3/20 flex items-center justify-center"><TrendingUp className="h-6 w-6 text-chart-3" /></div><div><p className="text-2xl font-bold">{stats.avgScore}%</p><p className="text-sm text-muted-foreground">{t('teacher.avgScore')}</p></div></CardContent></Card>
         </div>
 
-        <div className="grid lg:grid-cols-3 gap-8">
-          <Card className="lg:col-span-1">
-            <CardHeader className="flex flex-row items-center justify-between">
-              <div><CardTitle>{t('dashboard.students')}</CardTitle><CardDescription>Manage your students</CardDescription></div>
-              <Dialog open={addStudentDialogOpen} onOpenChange={setAddStudentDialogOpen}>
-                <DialogTrigger asChild>
-                  <Button size="sm"><Plus className="h-4 w-4" /></Button>
-                </DialogTrigger>
-                <DialogContent>
-                  <DialogHeader>
-                    <DialogTitle>Add New Student</DialogTitle>
-                    <DialogDescription>Enter the student's details below</DialogDescription>
-                  </DialogHeader>
-                  <div className="space-y-4 py-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="studentName">Student Name *</Label>
-                      <Input
-                        id="studentName"
-                        placeholder="Enter student's full name"
-                        value={newStudentName}
-                        onChange={(e) => setNewStudentName(e.target.value)}
-                        maxLength={100}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="studentAge">Age (optional)</Label>
-                      <Input
-                        id="studentAge"
-                        type="number"
-                        placeholder="Enter age (3-25)"
-                        value={newStudentAge}
-                        onChange={(e) => setNewStudentAge(e.target.value)}
-                        min={3}
-                        max={25}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Grade Level *</Label>
-                      <Select value={newStudentGrade} onValueChange={setNewStudentGrade}>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select grade (1-12)" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {Array.from({ length: 12 }, (_, i) => (
-                            <SelectItem key={i + 1} value={String(i + 1)}>
-                              Grade {i + 1}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <Button 
-                      onClick={handleAddStudent} 
-                      className="w-full"
-                      disabled={isAddingStudent}
-                    >
-                      {isAddingStudent ? (
-                        <>
-                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                          Adding...
-                        </>
-                      ) : (
-                        <>
-                          <Plus className="h-4 w-4 mr-2" />
-                          Add Student
-                        </>
-                      )}
-                    </Button>
-                  </div>
-                </DialogContent>
-              </Dialog>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              {students.length === 0 ? (
-                <p className="text-muted-foreground text-center py-8">No students yet. Add your first student!</p>
-              ) : (
-                students.map((student) => (
-                  <div key={student.id} className="flex items-center justify-between p-3 rounded-lg bg-muted/50 hover:bg-muted transition-colors">
-                    <div>
-                      <p className="font-medium">{student.name}</p>
-                      <p className="text-sm text-muted-foreground">Grade {student.grade} {student.age ? `• Age ${student.age}` : ''}</p>
-                    </div>
-                    <Button size="sm" onClick={() => { setSelectedStudent(student.id); setSelectedGrade(String(student.grade)); setSessionDialogOpen(true); }}>
-                      <Play className="h-4 w-4" />
-                    </Button>
-                  </div>
-                ))
-              )}
-            </CardContent>
-          </Card>
+        <Tabs defaultValue="overview" className="space-y-6">
+          <TabsList>
+            <TabsTrigger value="overview">{t('dashboard.students')}</TabsTrigger>
+            <TabsTrigger value="reports">{t('dashboard.reports')}</TabsTrigger>
+            <TabsTrigger value="training" className="flex items-center gap-2">
+              <BookOpen className="h-4 w-4" />
+              {t('training.title')}
+            </TabsTrigger>
+          </TabsList>
 
-          <Card className="lg:col-span-2">
-            <CardHeader className="flex flex-row items-center justify-between">
-              <div><CardTitle>{t('dashboard.sessions')}</CardTitle><CardDescription>Recent assessment sessions</CardDescription></div>
-              <Dialog open={sessionDialogOpen} onOpenChange={setSessionDialogOpen}>
-                <DialogTrigger asChild><Button><Play className="h-4 w-4 mr-2" />{t('dashboard.startSession')}</Button></DialogTrigger>
-                <DialogContent>
-                  <DialogHeader><DialogTitle>Start New Session</DialogTitle><DialogDescription>Select student, grade level, and assessment type</DialogDescription></DialogHeader>
-                  <div className="space-y-4 py-4">
-                    <div className="space-y-2">
-                      <Label>Select Student</Label>
-                      <Select value={selectedStudent} onValueChange={(v) => { setSelectedStudent(v); const s = students.find(st => st.id === v); if (s) setSelectedGrade(String(s.grade)); }}>
-                        <SelectTrigger><SelectValue placeholder="Choose a student" /></SelectTrigger>
-                        <SelectContent>{students.map((student) => (<SelectItem key={student.id} value={student.id}>{student.name}</SelectItem>))}</SelectContent>
-                      </Select>
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Grade Level (1-12)</Label>
-                      <Select value={selectedGrade} onValueChange={setSelectedGrade}>
-                        <SelectTrigger><SelectValue placeholder="Select grade" /></SelectTrigger>
-                        <SelectContent>{Array.from({ length: 12 }, (_, i) => (<SelectItem key={i + 1} value={String(i + 1)}>Grade {i + 1}</SelectItem>))}</SelectContent>
-                      </Select>
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Assessment Type</Label>
-                      <Select value={sessionType} onValueChange={(v) => setSessionType(v as 'dyslexia' | 'dyscalculia')}>
-                        <SelectTrigger><SelectValue /></SelectTrigger>
-                        <SelectContent><SelectItem value="dyslexia">Dyslexia Assessment</SelectItem><SelectItem value="dyscalculia">Dyscalculia Assessment</SelectItem></SelectContent>
-                      </Select>
-                    </div>
-                    <Button onClick={handleStartSession} className="w-full">Start Session</Button>
-                  </div>
-                </DialogContent>
-              </Dialog>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                {sessions.map((session) => (
-                  <div key={session.id} className="flex items-center justify-between p-4 rounded-lg border border-border hover:border-primary/50 transition-colors">
-                    <div className="flex items-center gap-4">
-                      <div className={`w-10 h-10 rounded-full flex items-center justify-center ${session.flagged ? 'bg-destructive/10' : 'bg-chart-3/20'}`}>
-                        {session.flagged ? <AlertTriangle className="h-5 w-5 text-destructive" /> : <CheckCircle className="h-5 w-5 text-chart-3" />}
+          <TabsContent value="overview">
+            <div className="grid lg:grid-cols-3 gap-8">
+              <Card className="lg:col-span-1">
+                <CardHeader className="flex flex-row items-center justify-between">
+                  <div><CardTitle>{t('dashboard.students')}</CardTitle><CardDescription>{t('teacher.manageStudents')}</CardDescription></div>
+                  <Dialog open={addStudentDialogOpen} onOpenChange={setAddStudentDialogOpen}>
+                    <DialogTrigger asChild>
+                      <Button size="sm"><Plus className="h-4 w-4" /></Button>
+                    </DialogTrigger>
+                    <DialogContent>
+                      <DialogHeader>
+                        <DialogTitle>{t('teacher.addStudent')}</DialogTitle>
+                        <DialogDescription>{t('teacher.enterDetails')}</DialogDescription>
+                      </DialogHeader>
+                      <div className="space-y-4 py-4">
+                        <div className="space-y-2">
+                          <Label htmlFor="studentName">{t('teacher.studentName')} *</Label>
+                          <Input
+                            id="studentName"
+                            placeholder={t('teacher.studentName')}
+                            value={newStudentName}
+                            onChange={(e) => setNewStudentName(e.target.value)}
+                            maxLength={100}
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="studentAge">{t('teacher.age')} ({t('teacher.optional')})</Label>
+                          <Input
+                            id="studentAge"
+                            type="number"
+                            placeholder="3-25"
+                            value={newStudentAge}
+                            onChange={(e) => setNewStudentAge(e.target.value)}
+                            min={3}
+                            max={25}
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label>{t('teacher.gradeLevel')} *</Label>
+                          <Select value={newStudentGrade} onValueChange={setNewStudentGrade}>
+                            <SelectTrigger>
+                              <SelectValue placeholder={t('teacher.selectGrade')} />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {Array.from({ length: 12 }, (_, i) => (
+                                <SelectItem key={i + 1} value={String(i + 1)}>
+                                  {t('teacher.grade')} {i + 1}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <Button 
+                          onClick={handleAddStudent} 
+                          className="w-full"
+                          disabled={isAddingStudent}
+                        >
+                          {isAddingStudent ? (
+                            <>
+                              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                              {t('teacher.adding')}
+                            </>
+                          ) : (
+                            <>
+                              <Plus className="h-4 w-4 mr-2" />
+                              {t('teacher.addStudent')}
+                            </>
+                          )}
+                        </Button>
                       </div>
-                      <div><p className="font-medium">{session.studentName}</p><p className="text-sm text-muted-foreground capitalize">{session.session_type} • Grade {session.studentGrade}</p></div>
-                    </div>
-                    <div className="flex items-center gap-4">
-                      <Badge variant={session.status === 'completed' ? 'default' : 'secondary'}>{session.status}</Badge>
-                      {session.overall_score && <span className="text-lg font-semibold">{session.overall_score}%</span>}
-                      {session.status === 'completed' && (
-                        <Button variant="ghost" size="sm" onClick={() => handleExportPDF(session)}><Download className="h-4 w-4" /></Button>
-                      )}
-                    </div>
+                    </DialogContent>
+                  </Dialog>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  {students.length === 0 ? (
+                    <p className="text-muted-foreground text-center py-8">{t('teacher.noStudents')}</p>
+                  ) : (
+                    students.map((student) => (
+                      <div key={student.id} className="flex items-center justify-between p-3 rounded-lg bg-muted/50 hover:bg-muted transition-colors">
+                        <div>
+                          <p className="font-medium">{student.name}</p>
+                          <p className="text-sm text-muted-foreground">{t('teacher.grade')} {student.grade} {student.age ? `• ${t('teacher.age')} ${student.age}` : ''}</p>
+                        </div>
+                        <Button size="sm" onClick={() => { setSelectedStudent(student.id); setSelectedGrade(String(student.grade)); setSessionDialogOpen(true); }}>
+                          <Play className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    ))
+                  )}
+                </CardContent>
+              </Card>
+
+              <Card className="lg:col-span-2">
+                <CardHeader className="flex flex-row items-center justify-between">
+                  <div><CardTitle>{t('dashboard.sessions')}</CardTitle><CardDescription>{t('teacher.recentSessions')}</CardDescription></div>
+                  <Dialog open={sessionDialogOpen} onOpenChange={setSessionDialogOpen}>
+                    <DialogTrigger asChild><Button><Play className="h-4 w-4 mr-2" />{t('dashboard.startSession')}</Button></DialogTrigger>
+                    <DialogContent>
+                      <DialogHeader><DialogTitle>{t('teacher.startNewSession')}</DialogTitle></DialogHeader>
+                      <div className="space-y-4 py-4">
+                        <div className="space-y-2">
+                          <Label>{t('teacher.selectStudent')}</Label>
+                          <Select value={selectedStudent} onValueChange={(v) => { setSelectedStudent(v); const s = students.find(st => st.id === v); if (s) setSelectedGrade(String(s.grade)); }}>
+                            <SelectTrigger><SelectValue placeholder={t('teacher.chooseStudent')} /></SelectTrigger>
+                            <SelectContent>{students.map((student) => (<SelectItem key={student.id} value={student.id}>{student.name}</SelectItem>))}</SelectContent>
+                          </Select>
+                        </div>
+                        <div className="space-y-2">
+                          <Label>{t('teacher.gradeLevel')} (1-12)</Label>
+                          <Select value={selectedGrade} onValueChange={setSelectedGrade}>
+                            <SelectTrigger><SelectValue placeholder={t('teacher.selectGrade')} /></SelectTrigger>
+                            <SelectContent>{Array.from({ length: 12 }, (_, i) => (<SelectItem key={i + 1} value={String(i + 1)}>{t('teacher.grade')} {i + 1}</SelectItem>))}</SelectContent>
+                          </Select>
+                        </div>
+                        <div className="space-y-2">
+                          <Label>{t('teacher.assessmentType')}</Label>
+                          <Select value={sessionType} onValueChange={(v) => setSessionType(v as 'dyslexia' | 'dyscalculia')}>
+                            <SelectTrigger><SelectValue /></SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="dyslexia">{t('teacher.dyslexiaAssessment')}</SelectItem>
+                              <SelectItem value="dyscalculia">{t('teacher.dyscalculiaAssessment')}</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <Button onClick={handleStartSession} className="w-full">{t('dashboard.startSession')}</Button>
+                      </div>
+                    </DialogContent>
+                  </Dialog>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-4">
+                    {sessions.map((session) => {
+                      const interpretation = getScoreInterpretation(session.overall_score, session.session_type, t);
+                      return (
+                        <div key={session.id} className="flex items-center justify-between p-4 rounded-lg border border-border hover:border-primary/50 transition-colors">
+                          <div className="flex items-center gap-4">
+                            <div className={`w-10 h-10 rounded-full flex items-center justify-center ${session.flagged ? 'bg-destructive/10' : 'bg-chart-3/20'}`}>
+                              {session.flagged ? <AlertTriangle className="h-5 w-5 text-destructive" /> : <CheckCircle className="h-5 w-5 text-chart-3" />}
+                            </div>
+                            <div>
+                              <p className="font-medium">{session.studentName}</p>
+                              <p className="text-sm text-muted-foreground capitalize">{session.session_type} • {t('teacher.grade')} {session.studentGrade}</p>
+                              {session.overall_score && (
+                                <p className={`text-xs mt-1 ${interpretation.variant === 'destructive' ? 'text-destructive' : 'text-muted-foreground'}`}>
+                                  {interpretation.text}
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-4">
+                            <Badge variant={session.status === 'completed' ? 'default' : 'secondary'}>{session.status}</Badge>
+                            {session.overall_score && <span className="text-lg font-semibold">{session.overall_score}%</span>}
+                            {session.status === 'completed' && (
+                              <Button variant="ghost" size="sm" onClick={() => handleExportPDF(session)}><Download className="h-4 w-4" /></Button>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-        </div>
+                </CardContent>
+              </Card>
+            </div>
+          </TabsContent>
+
+          <TabsContent value="reports">
+            <Card>
+              <CardHeader>
+                <CardTitle>{t('dashboard.reports')}</CardTitle>
+                <CardDescription>View and export detailed assessment reports</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  {sessions.filter(s => s.status === 'completed').map((session) => {
+                    const interpretation = getScoreInterpretation(session.overall_score, session.session_type, t);
+                    return (
+                      <div key={session.id} className="flex items-center justify-between p-4 rounded-lg border border-border">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-3">
+                            <p className="font-medium">{session.studentName}</p>
+                            <Badge variant={interpretation.variant}>{session.overall_score}%</Badge>
+                            {session.flagged && <Badge variant="destructive">{t('teacher.flagged')}</Badge>}
+                          </div>
+                          <p className="text-sm text-muted-foreground capitalize mt-1">
+                            {session.session_type} • {t('teacher.grade')} {session.studentGrade} • {new Date(session.created_at).toLocaleDateString()}
+                          </p>
+                          <p className="text-sm mt-2">{interpretation.text}</p>
+                        </div>
+                        <Button variant="outline" onClick={() => handleExportPDF(session)}>
+                          <Download className="h-4 w-4 mr-2" />
+                          {t('session.exportPDF')}
+                        </Button>
+                      </div>
+                    );
+                  })}
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="training">
+            <TeacherTraining />
+          </TabsContent>
+        </Tabs>
       </main>
     </div>
   );
