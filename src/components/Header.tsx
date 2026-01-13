@@ -47,6 +47,9 @@ const Header = () => {
           <Link to="/learn-more" className="text-foreground/80 hover:text-foreground transition-colors">
             {t('nav.learnMore')}
           </Link>
+          <Link to="/why-it-matters" className="text-foreground/80 hover:text-foreground transition-colors">
+            {t('nav.whyItMatters')}
+          </Link>
         </nav>
 
         <div className="flex items-center gap-4">

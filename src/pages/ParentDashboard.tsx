@@ -30,33 +30,6 @@ const sessionHistory = [
   { id: '4', date: '2026-01-03', type: 'Dyscalculia', score: 78, status: 'Moderate' },
 ];
 
-const learningResources = [
-  {
-    title: 'Understanding Dyslexia',
-    description: 'A comprehensive guide for parents',
-    type: 'Article',
-    link: '#',
-  },
-  {
-    title: 'Phonics Practice Games',
-    description: 'Interactive games to improve reading',
-    type: 'Interactive',
-    link: '#',
-  },
-  {
-    title: 'Supporting Your Child at Home',
-    description: 'Video series with expert tips',
-    type: 'Video',
-    link: '#',
-  },
-  {
-    title: 'Math Visualization Techniques',
-    description: 'Help your child understand numbers',
-    type: 'Guide',
-    link: '#',
-  },
-];
-
 const ParentDashboard = () => {
   const { user, profile, signOut, loading } = useAuth();
   const { t } = useLanguage();
@@ -72,6 +45,50 @@ const ParentDashboard = () => {
     await signOut();
     navigate('/');
   };
+
+  // Helper function to get score interpretation
+  const getScoreInterpretation = (score: number, type: string): { text: string; variant: 'default' | 'secondary' | 'destructive' } => {
+    if (score >= 85) {
+      return { text: t('score.excellent'), variant: 'default' };
+    } else if (score >= 70) {
+      return { text: t('score.good'), variant: 'default' };
+    } else if (score >= 55) {
+      return { text: t('score.moderate'), variant: 'secondary' };
+    } else {
+      return { 
+        text: type === 'Dyslexia' ? t('score.concernDyslexia') : t('score.concernDyscalculia'), 
+        variant: 'destructive' 
+      };
+    }
+  };
+
+  // Get learning resources with translations
+  const learningResources = [
+    {
+      title: 'Understanding Dyslexia',
+      description: 'A comprehensive guide for parents',
+      type: 'Article',
+      link: '#',
+    },
+    {
+      title: 'Phonics Practice Games',
+      description: 'Interactive games to improve reading',
+      type: 'Interactive',
+      link: '#',
+    },
+    {
+      title: 'Supporting Your Child at Home',
+      description: 'Video series with expert tips',
+      type: 'Video',
+      link: '#',
+    },
+    {
+      title: 'Math Visualization Techniques',
+      description: 'Help your child understand numbers',
+      type: 'Guide',
+      link: '#',
+    },
+  ];
 
   if (loading) {
     return (
@@ -89,7 +106,7 @@ const ParentDashboard = () => {
           <div className="flex items-center gap-3">
             <img src={swarLogo} alt="SWAR" className="h-10" />
             <div>
-              <h1 className="text-xl font-bold">Parent Dashboard</h1>
+              <h1 className="text-xl font-bold">{t('parent.dashboard')}</h1>
               <p className="text-sm text-muted-foreground">{t('dashboard.welcome')}, {profile?.full_name}</p>
             </div>
           </div>
@@ -111,16 +128,16 @@ const ParentDashboard = () => {
               <div className="flex-1">
                 <h2 className="text-2xl font-bold mb-1">{childData.name}</h2>
                 <p className="text-muted-foreground">
-                  {childData.grade} Grade • Age {childData.age}
+                  {childData.grade} {t('teacher.grade')} • {t('teacher.age')} {childData.age}
                 </p>
                 <div className="flex flex-wrap gap-4 mt-4">
                   <div className="flex items-center gap-2">
                     <Calendar className="h-4 w-4 text-muted-foreground" />
-                    <span className="text-sm">Last session: {childData.lastSession}</span>
+                    <span className="text-sm">{t('parent.lastSession')}: {childData.lastSession}</span>
                   </div>
                   <div className="flex items-center gap-2">
                     <FileText className="h-4 w-4 text-muted-foreground" />
-                    <span className="text-sm">{childData.totalSessions} total sessions</span>
+                    <span className="text-sm">{childData.totalSessions} {t('parent.totalSessions')}</span>
                   </div>
                 </div>
               </div>
@@ -137,27 +154,27 @@ const ParentDashboard = () => {
                   <TrendingUp className="h-5 w-5" />
                   {t('dashboard.progress')}
                 </CardTitle>
-                <CardDescription>Your child's assessment progress</CardDescription>
+                <CardDescription>{t('parent.childProgress')}</CardDescription>
               </CardHeader>
               <CardContent className="space-y-6">
                 <div>
                   <div className="flex justify-between mb-2">
-                    <span className="font-medium">Dyslexia Assessment</span>
+                    <span className="font-medium">{t('teacher.dyslexiaAssessment')}</span>
                     <span className="text-muted-foreground">{childData.dyslexiaProgress}%</span>
                   </div>
                   <Progress value={childData.dyslexiaProgress} className="h-3" />
                   <p className="text-sm text-muted-foreground mt-1">
-                    Phonological processing shows improvement
+                    {t('parent.phonologicalImproves')}
                   </p>
                 </div>
                 <div>
                   <div className="flex justify-between mb-2">
-                    <span className="font-medium">Dyscalculia Assessment</span>
+                    <span className="font-medium">{t('teacher.dyscalculiaAssessment')}</span>
                     <span className="text-muted-foreground">{childData.dyscalculiaProgress}%</span>
                   </div>
                   <Progress value={childData.dyscalculiaProgress} className="h-3" />
                   <p className="text-sm text-muted-foreground mt-1">
-                    Number sense development is on track
+                    {t('parent.numberSense')}
                   </p>
                 </div>
               </CardContent>
@@ -167,30 +184,33 @@ const ParentDashboard = () => {
             <Card>
               <CardHeader>
                 <CardTitle>{t('dashboard.sessions')}</CardTitle>
-                <CardDescription>Recent assessment sessions</CardDescription>
+                <CardDescription>{t('teacher.recentSessions')}</CardDescription>
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
-                  {sessionHistory.map((session) => (
-                    <div 
-                      key={session.id}
-                      className="flex items-center justify-between p-4 rounded-lg border border-border"
-                    >
-                      <div>
-                        <p className="font-medium">{session.type} Assessment</p>
-                        <p className="text-sm text-muted-foreground">{session.date}</p>
+                  {sessionHistory.map((session) => {
+                    const interpretation = getScoreInterpretation(session.score, session.type);
+                    return (
+                      <div 
+                        key={session.id}
+                        className="flex items-center justify-between p-4 rounded-lg border border-border"
+                      >
+                        <div>
+                          <p className="font-medium">{session.type} {t('session.assessment')}</p>
+                          <p className="text-sm text-muted-foreground">{session.date}</p>
+                          <p className={`text-xs mt-1 ${interpretation.variant === 'destructive' ? 'text-destructive' : 'text-muted-foreground'}`}>
+                            {interpretation.text}
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-4">
+                          <Badge variant={interpretation.variant}>
+                            {session.status}
+                          </Badge>
+                          <span className="text-lg font-semibold">{session.score}%</span>
+                        </div>
                       </div>
-                      <div className="flex items-center gap-4">
-                        <Badge variant={
-                          session.status === 'Normal' ? 'default' :
-                          session.status === 'Moderate' ? 'secondary' : 'destructive'
-                        }>
-                          {session.status}
-                        </Badge>
-                        <span className="text-lg font-semibold">{session.score}%</span>
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </CardContent>
             </Card>
@@ -203,7 +223,7 @@ const ParentDashboard = () => {
                 <BookOpen className="h-5 w-5" />
                 {t('dashboard.resources')}
               </CardTitle>
-              <CardDescription>Help your child succeed</CardDescription>
+              <CardDescription>{t('parent.helpChild')}</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               {learningResources.map((resource, idx) => (

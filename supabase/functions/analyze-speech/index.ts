@@ -11,6 +11,7 @@ interface SpeechAnalysisRequest {
   questionType: 'phoneme' | 'word' | 'sentence' | 'number' | 'calculation';
   sessionType: 'dyslexia' | 'dyscalculia';
   grade: number;
+  language?: string;
   allResponses?: Array<{
     transcript: string;
     expectedAnswer: string;
@@ -18,6 +19,15 @@ interface SpeechAnalysisRequest {
     responseTimeMs?: number;
   }>;
 }
+
+// Language names for AI prompts
+const languageNames: Record<string, string> = {
+  en: 'English',
+  hi: 'Hindi',
+  pa: 'Punjabi',
+  ta: 'Tamil',
+  te: 'Telugu',
+};
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -30,72 +40,90 @@ serve(async (req) => {
       throw new Error('LOVABLE_API_KEY is not configured');
     }
 
-    const { transcript, expectedAnswer, questionType, sessionType, grade, allResponses } = await req.json() as SpeechAnalysisRequest;
+    const { transcript, expectedAnswer, questionType, sessionType, grade, language = 'en', allResponses } = await req.json() as SpeechAnalysisRequest;
+
+    const languageName = languageNames[language] || 'English';
 
     const systemPrompt = sessionType === 'dyslexia' 
-      ? `You are an expert speech-language pathologist specializing in dyslexia assessment. Analyze speech responses for signs of dyslexia.
+      ? `You are an expert speech-language pathologist specializing in dyslexia assessment for ${languageName}-speaking children in India.
 
-DYSLEXIA FLAGGING CRITERIA:
+IMPORTANT: The student is responding in ${languageName}. Analyze their responses considering:
+- ${languageName}-specific phonological patterns
+- Common pronunciation variations in Indian ${languageName}
+- Regional accent differences are NOT indicators of dyslexia
+
+DYSLEXIA FLAGGING CRITERIA (DSM-5 compliant):
 1. Phoneme Error Rate (PER): Calculate if >10% errors on reading/naming tasks
-2. Phoneme Confusions: Look for consistent confusion between labials (b,p,m), fricatives (s,f,v), stops (t,d,k,g)
-3. Syllable Stress Pattern Deviance: Incorrect stress patterns in multi-syllable words
-4. Letter Reversals: b/d, p/q confusions
-5. Word Substitutions: Replacing words with visually similar ones
+2. Phoneme Confusions: Look for consistent confusion between similar sounds in ${languageName}
+3. Syllable Stress Pattern Deviance: Incorrect stress patterns
+4. Letter/Character Reversals: Common reversals for the script
+5. Word Substitutions: Replacing words with similar ones
 6. Omissions/Additions: Missing or extra phonemes
 
-For grade ${grade} students, consider age-appropriate expectations.
+For grade ${grade} students, consider age-appropriate expectations for ${languageName} literacy.
 
-Analyze the response and provide:
+Provide analysis in JSON with:
 - phonemeErrorRate: percentage (0-100)
-- phonemeConfusions: array of confused phoneme pairs
+- phonemeConfusions: array of confused sound pairs
 - syllableStressErrors: boolean
-- letterReversals: array of reversed letters
-- wordSubstitutions: array of substituted words
 - overallAccuracy: percentage (0-100)
 - confidence: your confidence in this analysis (0-100)
-- detailedAnalysis: brief text explanation
-- isFlagged: boolean (true if meets flagging criteria)`
-      : `You are an expert in dyscalculia assessment. Analyze numerical/mathematical responses for signs of dyscalculia.
+- detailedAnalysis: brief text explanation in ${languageName} AND English
+- isFlagged: boolean (true if meets flagging criteria)
+- recommendedActions: array of suggested next steps`
+      : `You are an expert in dyscalculia assessment for ${languageName}-speaking children in India.
 
-DYSCALCULIA FLAGGING CRITERIA:
-1. Transcoding Errors: Confusing number words/digits (21↔12, 6↔9)
-2. Place-Value Misunderstanding: Reading "5007" as "five hundred seven" instead of "five thousand seven"
+IMPORTANT: The student is responding in ${languageName}. Analyze their numerical responses considering:
+- ${languageName} number naming conventions
+- How numbers are spoken in ${languageName}
+- Regional variations in mathematical terminology
+
+DYSCALCULIA FLAGGING CRITERIA (DSM-5 compliant):
+1. Transcoding Errors: Confusing number words/digits
+2. Place-Value Misunderstanding: Errors in reading multi-digit numbers
 3. Counting Errors: Miscounting, skip-counting errors
-4. Operation Confusion: Confusing +, -, ×, ÷
-5. Number Sequence Errors: Incorrect ordering or missing numbers
+4. Operation Confusion: Confusing mathematical operations
+5. Number Sequence Errors: Incorrect ordering
 6. Calculation Accuracy: Consistent arithmetic errors
 7. Response Latency: Slow responses indicating retrieval difficulties
 
-For grade ${grade} students, consider age-appropriate expectations.
+For grade ${grade} students, consider age-appropriate mathematical expectations.
 
-Analyze the response and provide:
+Provide analysis in JSON with:
 - transcodingErrors: array of transcoding mistakes
 - placeValueErrors: boolean
 - countingAccuracy: percentage (0-100)
 - operationConfusion: boolean
-- sequenceErrors: array of sequence mistakes
 - calculationAccuracy: percentage (0-100)
 - overallAccuracy: percentage (0-100)
 - confidence: your confidence in this analysis (0-100)
-- detailedAnalysis: brief text explanation
-- isFlagged: boolean (true if meets flagging criteria)`;
+- detailedAnalysis: brief text explanation in ${languageName} AND English
+- isFlagged: boolean (true if meets flagging criteria)
+- recommendedActions: array of suggested next steps`;
 
     const userPrompt = allResponses 
-      ? `Analyze this complete session with multiple responses:
+      ? `Analyze this complete ${sessionType} assessment session for a Grade ${grade} student responding in ${languageName}:
 
 ${allResponses.map((r, i) => `Question ${i + 1}:
 - Type: ${r.questionType}
 - Expected: "${r.expectedAnswer}"
-- Response: "${r.transcript}"
+- Student's Response: "${r.transcript}"
 - Response Time: ${r.responseTimeMs ? r.responseTimeMs + 'ms' : 'N/A'}`).join('\n\n')}
 
-Provide a comprehensive session analysis with overall flagging decision.`
-      : `Analyze this single response:
+Provide a comprehensive session analysis with:
+1. Overall performance summary
+2. Specific error patterns identified
+3. Whether the student should be flagged for further evaluation
+4. Recommended next steps for teachers/parents
+5. Provide the detailed analysis in both ${languageName} and English for parent communication`
+      : `Analyze this single response from a Grade ${grade} ${languageName}-speaking student:
 - Question Type: ${questionType}
 - Expected Answer: "${expectedAnswer}"
 - Student's Response: "${transcript}"
 
 Provide analysis in JSON format.`;
+
+    console.log(`Analyzing speech for ${languageName} speaker, grade ${grade}, session type: ${sessionType}`);
 
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
@@ -145,6 +173,8 @@ Provide analysis in JSON format.`;
         error: "Could not parse structured response"
       };
     }
+
+    console.log("Analysis complete:", JSON.stringify(analysis).slice(0, 200));
 
     return new Response(JSON.stringify(analysis), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
