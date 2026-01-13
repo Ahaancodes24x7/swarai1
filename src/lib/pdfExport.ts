@@ -35,6 +35,7 @@ interface SessionData {
   isFlagged: boolean;
   aiAnalysis?: AIAnalysis;
   teacherName?: string;
+  interpretation?: string;
 }
 
 export function generatePDFContent(data: SessionData): string {
