@@ -199,6 +199,7 @@ export type Database = {
           grade: string | null
           id: string
           name: string
+          parent_email: string | null
           parent_id: string | null
           teacher_id: string | null
           updated_at: string
@@ -209,6 +210,7 @@ export type Database = {
           grade?: string | null
           id?: string
           name: string
+          parent_email?: string | null
           parent_id?: string | null
           teacher_id?: string | null
           updated_at?: string
@@ -219,6 +221,7 @@ export type Database = {
           grade?: string | null
           id?: string
           name?: string
+          parent_email?: string | null
           parent_id?: string | null
           teacher_id?: string | null
           updated_at?: string

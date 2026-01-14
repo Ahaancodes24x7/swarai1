@@ -14,19 +14,22 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
 import { 
   Users, Play, FileText, LogOut, Plus, TrendingUp, 
-  AlertTriangle, CheckCircle, Loader2, Download, BookOpen
+  AlertTriangle, CheckCircle, Loader2, Download, BookOpen,
+  Mail, Edit2, History
 } from 'lucide-react';
 import swarLogo from '@/assets/swar-logo.png';
 import { downloadPDF } from '@/lib/pdfExport';
 import TeacherTraining from '@/components/TeacherTraining';
 import PracticeWorksheet from '@/components/PracticeWorksheet';
 import ProgressChart from '@/components/ProgressChart';
+import SessionHistory from '@/components/SessionHistory';
 
 interface Student {
   id: string;
   name: string;
   age: number | null;
   grade: number;
+  parent_email?: string | null;
 }
 
 interface Session {
@@ -77,7 +80,10 @@ const TeacherDashboard = () => {
   const [newStudentName, setNewStudentName] = useState('');
   const [newStudentAge, setNewStudentAge] = useState('');
   const [newStudentGrade, setNewStudentGrade] = useState('');
+  const [newStudentParentEmail, setNewStudentParentEmail] = useState('');
   const [isAddingStudent, setIsAddingStudent] = useState(false);
+  const [editingStudent, setEditingStudent] = useState<Student | null>(null);
+  const [editParentEmail, setEditParentEmail] = useState('');
 
   useEffect(() => {
     if (!loading && (!user || profile?.role !== 'teacher')) {
@@ -111,6 +117,7 @@ const TeacherDashboard = () => {
         name: s.name,
         age: s.age,
         grade: parseInt(s.grade || '1') || 1,
+        parent_email: s.parent_email,
       }));
       setStudents(formattedStudents);
     }
@@ -183,22 +190,59 @@ const TeacherDashboard = () => {
     try {
       const { data, error } = await supabase
         .from('students')
-        .insert({ name, age: newStudentAge ? age : null, grade: String(grade), teacher_id: profile.id })
+        .insert({ 
+          name, 
+          age: newStudentAge ? age : null, 
+          grade: String(grade), 
+          teacher_id: profile.id,
+          parent_email: newStudentParentEmail.trim() || null
+        })
         .select()
         .single();
 
       if (error) throw error;
 
-      setStudents([...students, { id: data.id, name: data.name, age: data.age, grade: parseInt(data.grade || '1') || 1 }]);
+      setStudents([...students, { 
+        id: data.id, 
+        name: data.name, 
+        age: data.age, 
+        grade: parseInt(data.grade || '1') || 1,
+        parent_email: data.parent_email
+      }]);
       setAddStudentDialogOpen(false);
       setNewStudentName('');
       setNewStudentAge('');
       setNewStudentGrade('');
+      setNewStudentParentEmail('');
       toast({ title: t('teacher.studentAdded') });
     } catch (error: any) {
       toast({ title: 'Failed to add student', description: error.message, variant: 'destructive' });
     } finally {
       setIsAddingStudent(false);
+    }
+  };
+
+  const handleUpdateParentEmail = async () => {
+    if (!editingStudent) return;
+    
+    try {
+      const { error } = await supabase
+        .from('students')
+        .update({ parent_email: editParentEmail.trim() || null })
+        .eq('id', editingStudent.id);
+
+      if (error) throw error;
+
+      setStudents(students.map(s => 
+        s.id === editingStudent.id 
+          ? { ...s, parent_email: editParentEmail.trim() || null }
+          : s
+      ));
+      setEditingStudent(null);
+      setEditParentEmail('');
+      toast({ title: 'Parent email updated successfully' });
+    } catch (error: any) {
+      toast({ title: 'Failed to update parent email', description: error.message, variant: 'destructive' });
     }
   };
 
@@ -280,6 +324,10 @@ const TeacherDashboard = () => {
           <TabsList>
             <TabsTrigger value="overview">{t('dashboard.students')}</TabsTrigger>
             <TabsTrigger value="reports">{t('dashboard.reports')}</TabsTrigger>
+            <TabsTrigger value="history" className="flex items-center gap-2">
+              <History className="h-4 w-4" />
+              Session History
+            </TabsTrigger>
             <TabsTrigger value="training" className="flex items-center gap-2">
               <BookOpen className="h-4 w-4" />
               {t('training.title')}
@@ -311,6 +359,21 @@ const TeacherDashboard = () => {
                             <SelectContent>{Array.from({ length: 12 }, (_, i) => (<SelectItem key={i + 1} value={String(i + 1)}>{t('teacher.grade')} {i + 1}</SelectItem>))}</SelectContent>
                           </Select>
                         </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="parentEmail">Parent Email ({t('teacher.optional')})</Label>
+                          <Input 
+                            id="parentEmail" 
+                            type="email" 
+                            placeholder="parent@example.com" 
+                            value={newStudentParentEmail} 
+                            onChange={(e) => setNewStudentParentEmail(e.target.value)} 
+                            maxLength={255} 
+                          />
+                          <p className="text-xs text-muted-foreground">
+                            <Mail className="h-3 w-3 inline mr-1" />
+                            Student will be automatically linked when parent signs up with this email
+                          </p>
+                        </div>
                         <Button onClick={handleAddStudent} className="w-full" disabled={isAddingStudent}>
                           {isAddingStudent ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />{t('teacher.adding')}</> : <><Plus className="h-4 w-4 mr-2" />{t('teacher.addStudent')}</>}
                         </Button>
@@ -324,13 +387,32 @@ const TeacherDashboard = () => {
                   ) : (
                     students.map((student) => (
                       <div key={student.id} className="flex items-center justify-between p-3 rounded-lg bg-muted/50 hover:bg-muted transition-colors">
-                        <div>
+                        <div className="flex-1">
                           <p className="font-medium">{student.name}</p>
                           <p className="text-sm text-muted-foreground">{t('teacher.grade')} {student.grade} {student.age ? `• ${t('teacher.age')} ${student.age}` : ''}</p>
+                          {student.parent_email ? (
+                            <p className="text-xs text-chart-3 flex items-center gap-1 mt-1">
+                              <Mail className="h-3 w-3" />
+                              Linked: {student.parent_email}
+                            </p>
+                          ) : (
+                            <button 
+                              onClick={() => { setEditingStudent(student); setEditParentEmail(student.parent_email || ''); }}
+                              className="text-xs text-muted-foreground hover:text-primary flex items-center gap-1 mt-1"
+                            >
+                              <Edit2 className="h-3 w-3" />
+                              Add parent email
+                            </button>
+                          )}
                         </div>
-                        <Button size="sm" onClick={() => { setSelectedStudent(student.id); setSelectedGrade(String(student.grade)); setSessionDialogOpen(true); }}>
-                          <Play className="h-4 w-4" />
-                        </Button>
+                        <div className="flex items-center gap-2">
+                          <Button size="sm" variant="ghost" onClick={() => { setEditingStudent(student); setEditParentEmail(student.parent_email || ''); }}>
+                            <Edit2 className="h-4 w-4" />
+                          </Button>
+                          <Button size="sm" onClick={() => { setSelectedStudent(student.id); setSelectedGrade(String(student.grade)); setSessionDialogOpen(true); }}>
+                            <Play className="h-4 w-4" />
+                          </Button>
+                        </div>
                       </div>
                     ))
                   )}
@@ -482,10 +564,65 @@ const TeacherDashboard = () => {
             </div>
           </TabsContent>
 
+          <TabsContent value="history">
+            <SessionHistory 
+              sessions={sessions.map(s => ({
+                ...s,
+                studentName: s.studentName,
+                studentGrade: s.studentGrade,
+              }))}
+              viewType="teacher"
+              onExportPDF={handleExportPDF}
+            />
+          </TabsContent>
+
           <TabsContent value="training">
             <TeacherTraining />
           </TabsContent>
         </Tabs>
+
+        {/* Edit Parent Email Dialog */}
+        <Dialog open={!!editingStudent} onOpenChange={(open) => { if (!open) { setEditingStudent(null); setEditParentEmail(''); } }}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Link Parent Account</DialogTitle>
+              <DialogDescription>
+                Enter the parent's email address to link this student to their parent account.
+                The student will automatically appear in the parent's dashboard.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              <div className="space-y-2">
+                <Label>Student</Label>
+                <p className="font-medium">{editingStudent?.name}</p>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="editParentEmail">Parent Email</Label>
+                <Input 
+                  id="editParentEmail" 
+                  type="email" 
+                  placeholder="parent@example.com" 
+                  value={editParentEmail} 
+                  onChange={(e) => setEditParentEmail(e.target.value)} 
+                  maxLength={255} 
+                />
+                <p className="text-xs text-muted-foreground">
+                  <Mail className="h-3 w-3 inline mr-1" />
+                  When a parent signs up with this email, the student will be automatically linked to their account.
+                </p>
+              </div>
+              <div className="flex gap-2">
+                <Button onClick={handleUpdateParentEmail} className="flex-1">
+                  <CheckCircle className="h-4 w-4 mr-2" />
+                  Save
+                </Button>
+                <Button variant="outline" onClick={() => { setEditingStudent(null); setEditParentEmail(''); }}>
+                  Cancel
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
       </main>
     </div>
   );

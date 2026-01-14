@@ -12,11 +12,12 @@ import {
   LogOut, TrendingUp, Calendar, BookOpen, 
   Video, FileText, ExternalLink, Loader2, User,
   Brain, Heart, Home, Gamepad2, Music, Sparkles,
-  Clock, Target, Award, HelpCircle
+  Clock, Target, Award, HelpCircle, History
 } from 'lucide-react';
 import swarLogo from '@/assets/swar-logo.png';
 import ParentHelp from '@/components/ParentHelp';
 import ProgressChart from '@/components/ProgressChart';
+import SessionHistory from '@/components/SessionHistory';
 
 interface Student {
   id: string;
@@ -357,6 +358,10 @@ const ParentDashboard = () => {
               <TabsList>
                 <TabsTrigger value="overview">{t('dashboard.progress')}</TabsTrigger>
                 <TabsTrigger value="sessions">{t('dashboard.sessions')}</TabsTrigger>
+                <TabsTrigger value="history" className="flex items-center gap-2">
+                  <History className="h-4 w-4" />
+                  History
+                </TabsTrigger>
                 <TabsTrigger value="resources">{t('dashboard.resources')}</TabsTrigger>
                 <TabsTrigger value="help" className="flex items-center gap-2">
                   <HelpCircle className="h-4 w-4" />
@@ -514,6 +519,13 @@ const ParentDashboard = () => {
                     )}
                   </CardContent>
                 </Card>
+              </TabsContent>
+
+              <TabsContent value="history">
+                <SessionHistory 
+                  sessions={sessions}
+                  viewType="parent"
+                />
               </TabsContent>
 
               <TabsContent value="resources">
