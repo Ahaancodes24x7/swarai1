@@ -11,6 +11,7 @@ const RoleSelection = () => {
     {
       id: 'parent',
       icon: Users,
+      image: '/image/parent.png',
       title: t('role.parent'),
       description: t('role.parentDesc'),
       color: 'from-chart-1 to-chart-2',
@@ -18,6 +19,7 @@ const RoleSelection = () => {
     {
       id: 'teacher',
       icon: GraduationCap,
+      image: '/image/teacher.png',
       title: t('role.teacher'),
       description: t('role.teacherDesc'),
       color: 'from-chart-3 to-chart-4',
@@ -45,9 +47,21 @@ const RoleSelection = () => {
             >
               <div className={`h-2 bg-gradient-to-r ${role.color}`} />
               <CardHeader className="text-center pt-8">
-                <div className={`w-20 h-20 mx-auto rounded-full bg-gradient-to-br ${role.color} flex items-center justify-center mb-4 group-hover:scale-110 transition-transform`}>
-                  <role.icon className="h-10 w-10 text-primary-foreground" />
+                <div
+                   className={`w-20 h-20 mx-auto rounded-full bg-gradient-to-br ${role.color}
+                   flex items-center justify-center mb-4 overflow-hidden`}
+                >
+                   {role.image ? (
+                     <img
+                        src={role.image}
+                        alt={role.id}
+                        className="w-10 h-10 object-contain transition-transform duration-300 group-hover:scale-110"
+                     />
+                    ) : (
+                      <role.icon className="h-10 w-10 text-primary-foreground" />
+                    )}
                 </div>
+
                 <CardTitle className="text-2xl">{role.title}</CardTitle>
                 <CardDescription className="text-base">{role.description}</CardDescription>
               </CardHeader>
